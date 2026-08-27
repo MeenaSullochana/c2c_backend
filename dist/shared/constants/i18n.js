@@ -1,6 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SUPPORTED_LOCALES = exports.I18N_KEYS = void 0;
+/**
+ * Localization keys. Never use translated text as identifiers.
+ * Phase 8 wires these to the translation engine.
+ */
 exports.I18N_KEYS = {
     INTEGRATION_CONNECTED: 'integration.connected',
     INTEGRATION_DISABLED: 'integration.disabled',
@@ -50,4 +54,3 @@ exports.SUPPORTED_LOCALES = [
     'te',
     'ar',
 ];
-//# sourceMappingURL=i18n.js.map

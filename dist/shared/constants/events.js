@@ -20,4 +20,3 @@ exports.DOMAIN_EVENTS = {
     SUBSCRIPTION_EXPIRED: 'subscription.expired',
     SUBSCRIPTION_CANCELLED: 'subscription.cancelled',
 };
-//# sourceMappingURL=events.js.map

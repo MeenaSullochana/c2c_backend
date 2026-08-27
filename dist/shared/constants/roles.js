@@ -6,4 +6,3 @@ exports.ROLE_KEYS = {
     TENANT_ADMIN: 'tenant.admin',
     TENANT_MEMBER: 'tenant.member',
 };
-//# sourceMappingURL=roles.js.map

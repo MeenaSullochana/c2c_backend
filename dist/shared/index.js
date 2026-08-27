@@ -24,4 +24,3 @@ Object.defineProperty(exports, "SUPPORTED_LOCALES", { enumerable: true, get: fun
 var api_1 = require("./constants/api");
 Object.defineProperty(exports, "API_PREFIX", { enumerable: true, get: function () { return api_1.API_PREFIX; } });
 Object.defineProperty(exports, "API_ROUTES", { enumerable: true, get: function () { return api_1.API_ROUTES; } });
-//# sourceMappingURL=index.js.map

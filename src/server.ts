@@ -15,14 +15,37 @@ import { branchRouter, locationRouter } from './routes-locations';
 import { publicTenant, publicUser } from './auth-utils';
 import { PERMISSIONS } from './shared';
 
+function allowedOrigins(): Set<string> {
+  return new Set(
+    [
+      ...env.WEB_ORIGIN.split(','),
+      'http://localhost:5173',
+      'https://moneyy-zone.netlify.app',
+    ]
+      .map((origin) => origin.trim().replace(/\/$/, ''))
+      .filter(Boolean),
+  );
+}
+
 async function bootstrap() {
   await connectDb();
 
+  const origins = allowedOrigins();
   const app = express();
-  app.use(helmet());
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
   app.use(
     cors({
-      origin: true,
+      origin(origin, callback) {
+        if (!origin || origins.has(origin.replace(/\/$/, ''))) {
+          callback(null, true);
+          return;
+        }
+        callback(new Error('Not allowed by CORS'));
+      },
       credentials: true,
     }),
   );
@@ -110,8 +133,8 @@ async function bootstrap() {
     return res.status(500).json({ message: 'Internal server error' });
   });
 
-  app.listen(env.API_PORT, () => {
-    console.log(`Node API listening on http://localhost:${env.API_PORT}/api`);
+  app.listen(env.API_PORT, '0.0.0.0', () => {
+    console.log(`Node API listening on port ${env.API_PORT}`);
   });
 }
 

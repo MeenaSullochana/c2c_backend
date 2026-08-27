@@ -11,5 +11,5 @@
     "resolveJsonModule": true
   },
   "include": ["src"],
-  "exclude": ["src/core", "src/common"]
+  "exclude": ["node_modules", "dist", "src/core", "src/common"]
 }

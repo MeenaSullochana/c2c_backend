@@ -432,11 +432,11 @@ async function resolveEmployeeRefs(
       orgRole: 'SUPERVISOR',
       status: 'ACTIVE',
     }).exec();
-    if (!supervisor || String(supervisor._id) === currentId) {
+    if (!supervisor || !supervisor.managerId || String(supervisor._id) === currentId) {
       throw new ApiException(400, 'hrm.supervisor_invalid');
     }
     supervisorId = supervisor._id;
-    managerId = supervisor.managerId;
+    managerId = supervisor.managerId ?? undefined;
   }
 
   const joiningDate = new Date(data.joiningDate);

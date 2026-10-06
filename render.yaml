@@ -2,13 +2,14 @@ services:
   - type: web
     name: c2c-backend
     runtime: docker
-    dockerfilePath: ./Dockerfile
+    plan: free
     healthCheckPath: /api/health
+    dockerfilePath: ./Dockerfile
     envVars:
       - key: NODE_ENV
         value: production
       - key: WEB_ORIGIN
-        value: https://moneyy-zone.netlify.app
+        value: https://moneyy-zone.netlify.app,https://storied-concha-0d66bd.netlify.app
       - key: MONGODB_URI
         sync: false
       - key: JWT_SECRET

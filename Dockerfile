@@ -1,7 +1,9 @@
 FROM node:20-alpine AS build
 WORKDIR /app
+# Render injects NODE_ENV=production during build; tsc lives in devDependencies.
+ENV NODE_ENV=development
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --include=dev
 COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build

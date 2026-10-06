@@ -25,10 +25,27 @@ function allowedOrigins(): Set<string> {
       'http://localhost:5173',
       'http://localhost:5174',
       'https://moneyy-zone.netlify.app',
+      'https://storied-concha-0d66bd.netlify.app',
     ]
       .map((origin) => origin.trim().replace(/\/$/, ''))
       .filter(Boolean),
   );
+}
+
+function isAllowedOrigin(origin: string | undefined, origins: Set<string>): boolean {
+  if (!origin) {
+    return true;
+  }
+  const normalized = origin.replace(/\/$/, '');
+  if (origins.has(normalized)) {
+    return true;
+  }
+  try {
+    const host = new URL(normalized).hostname;
+    return host.endsWith('.netlify.app') || host === 'localhost' || host === '127.0.0.1';
+  } catch {
+    return false;
+  }
 }
 
 async function bootstrap() {
@@ -44,7 +61,7 @@ async function bootstrap() {
   app.use(
     cors({
       origin(origin, callback) {
-        if (!origin || origins.has(origin.replace(/\/$/, ''))) {
+        if (isAllowedOrigin(origin, origins)) {
           callback(null, true);
           return;
         }

@@ -9,7 +9,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: WEB_ORIGIN
-        value: https://storied-concha-0d66bd.netlify.app,https://moneyy-zone.netlify.app
+        value: https://moneyy-zone.netlify.app
       - key: MONGODB_URI
         sync: false
       - key: JWT_SECRET

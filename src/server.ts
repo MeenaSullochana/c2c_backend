@@ -25,7 +25,6 @@ function allowedOrigins(): Set<string> {
       'http://localhost:5173',
       'http://localhost:5174',
       'https://moneyy-zone.netlify.app',
-      'https://storied-concha-0d66bd.netlify.app',
     ]
       .map((origin) => origin.trim().replace(/\/$/, ''))
       .filter(Boolean),

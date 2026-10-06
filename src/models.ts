@@ -33,6 +33,12 @@ const userSchema = new Schema(
     locale: { type: String, required: true, default: 'en' },
     roleKeys: { type: [String], required: true, default: [] },
     permissions: { type: [String], required: true, default: [] },
+    employeeId: { type: Schema.Types.ObjectId, ref: 'Employee' },
+    accessScope: {
+      type: String,
+      enum: ['ALL', 'STATE', 'CITY', 'BRANCH', 'TEAM', 'SELF'],
+      default: 'ALL',
+    },
     lastLoginAt: { type: Date },
   },
   { timestamps: true, collection: 'users' },

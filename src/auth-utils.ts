@@ -48,6 +48,8 @@ export function publicUser(user: {
   locale: string;
   roleKeys: string[];
   permissions: string[];
+  employeeId?: unknown;
+  accessScope?: string;
 }, tenant: {
   _id: unknown;
   name: string;
@@ -61,6 +63,14 @@ export function publicUser(user: {
   supportPhone?: string;
   address?: string;
   website?: string;
+}, scopeMeta?: {
+  employeeId?: string | null;
+  accessScope?: string;
+  orgRole?: string | null;
+  branch?: { id: string; name: string; code?: string } | null;
+  city?: { id: string; name: string } | null;
+  state?: { id: string; name: string; code?: string } | null;
+  country?: { id: string; name: string; code?: string } | null;
 }) {
   return {
     id: String(user._id),
@@ -72,6 +82,13 @@ export function publicUser(user: {
     locale: user.locale,
     roleKeys: user.roleKeys,
     permissions: user.permissions,
+    employeeId: scopeMeta?.employeeId ?? (user.employeeId ? String(user.employeeId) : null),
+    accessScope: scopeMeta?.accessScope ?? user.accessScope ?? 'ALL',
+    orgRole: scopeMeta?.orgRole ?? null,
+    branch: scopeMeta?.branch ?? null,
+    city: scopeMeta?.city ?? null,
+    state: scopeMeta?.state ?? null,
+    country: scopeMeta?.country ?? null,
     tenant: publicTenant(tenant),
   };
 }

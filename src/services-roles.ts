@@ -3,7 +3,7 @@ import type { Request } from 'express';
 import { ApiException } from './http-error';
 import { HrmRoleModel } from './models-business';
 import { parseObjectId, tenantObjectId } from './scope';
-import { PERMISSIONS } from './shared';
+import { PERMISSIONS, ORG_ROLES, type OrgRole } from './shared';
 
 const allowedPermissions = new Set(Object.values(PERMISSIONS));
 
@@ -11,8 +11,8 @@ const roleBody = z.object({
   name: z.string().trim().min(2).max(80),
   key: z.string().trim().min(2).max(40).optional(),
   description: z.string().trim().max(200).optional(),
-  minAge: z.coerce.number().int().min(16).max(80).default(18),
-  orgRole: z.enum(['MANAGER', 'SUPERVISOR', 'STAFF']),
+  minAge: z.coerce.number().int().min(16).max(80).optional().default(18),
+  orgRole: z.enum(ORG_ROLES as unknown as [string, ...string[]]),
   permissions: z.array(z.string()).default([]),
 });
 
@@ -62,7 +62,7 @@ export async function updateRole(req: Request) {
   if (parsed.data.key) row.key = slugKey(parsed.data.key);
   if (parsed.data.description !== undefined) row.description = parsed.data.description;
   if (parsed.data.minAge !== undefined) row.minAge = parsed.data.minAge;
-  if (parsed.data.orgRole) row.orgRole = parsed.data.orgRole;
+  if (parsed.data.orgRole) row.orgRole = parsed.data.orgRole as OrgRole;
   if (parsed.data.permissions) {
     row.permissions = parsed.data.permissions.filter((item) => allowedPermissions.has(item as never));
   }

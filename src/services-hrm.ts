@@ -11,10 +11,31 @@ import {
   LeaveRequestModel,
   LeaveTypeModel,
 } from './models-business';
-import { dateKey, namedId, parseObjectId, tenantObjectId } from './scope';
+import {
+  assertEmployeeInAccess,
+  buildEmployeeAccessFilter,
+  dateKey,
+  namedId,
+  parseObjectId,
+  tenantObjectId,
+} from './scope';
 import mongoose from 'mongoose';
+import { PERMISSIONS } from './shared';
 
-const orgRoleSchema = z.enum(['MANAGER', 'SUPERVISOR', 'STAFF']);
+const orgRoleSchema = z.enum([
+  'HEAD',
+  'REGIONAL_HEAD',
+  'LOCATION_HEAD',
+  'BRANCH_HEAD',
+  'SALES_MANAGER',
+  'EXECUTIVE',
+  'ACCOUNTS',
+  'COORDINATOR_HEAD',
+  'COORDINATOR',
+  'MANAGER',
+  'SUPERVISOR',
+  'STAFF',
+]);
 
 export async function listDepartments(req: Request) {
   const rows = await DepartmentModel.find({ tenantId: tenantObjectId(req) }).sort({ name: 1 }).lean().exec();
@@ -71,8 +92,7 @@ export async function createDesignation(req: Request) {
 }
 
 export async function listEmployees(req: Request) {
-  const tenantId = tenantObjectId(req);
-  const filter: Record<string, unknown> = { tenantId };
+  const { tenantId, filter } = await buildEmployeeAccessFilter(req);
   if (req.query.branchId) {
     filter.branchId = parseObjectId(String(req.query.branchId), 'branchId');
   }
@@ -193,16 +213,25 @@ export async function createLeaveType(req: Request) {
 }
 
 export async function listLeaves(req: Request) {
-  const tenantId = tenantObjectId(req);
-  const filter: Record<string, unknown> = { tenantId };
+  const { tenantId, filter: empFilter } = await buildEmployeeAccessFilter(req);
+  const visible = await EmployeeModel.find(empFilter).select('_id').lean().exec();
+  const visibleIds = visible.map((row) => row._id);
+  const filter: Record<string, unknown> = {
+    tenantId,
+    employeeId: {
+      $in: visibleIds.length ? visibleIds : [new mongoose.Types.ObjectId('000000000000000000000000')],
+    },
+  };
   if (req.query.status) {
     filter.status = String(req.query.status);
   }
   if (req.query.employeeId) {
-    filter.employeeId = parseObjectId(String(req.query.employeeId), 'employeeId');
+    const requested = parseObjectId(String(req.query.employeeId), 'employeeId');
+    await assertEmployeeInAccess(req, String(requested));
+    filter.employeeId = requested;
   }
   const rows = await LeaveRequestModel.find(filter).sort({ createdAt: -1 }).lean().exec();
-  const employees = await EmployeeModel.find({ tenantId }).lean().exec();
+  const employees = await EmployeeModel.find({ tenantId, _id: { $in: visibleIds } }).lean().exec();
   const types = await LeaveTypeModel.find({ tenantId }).lean().exec();
   const employeeMap = new Map(employees.map((row) => [String(row._id), row]));
   const typeMap = new Map(types.map((row) => [String(row._id), row]));
@@ -231,7 +260,7 @@ export async function listLeaves(req: Request) {
 export async function createLeave(req: Request) {
   const parsed = z
     .object({
-      employeeId: z.string().min(1),
+      employeeId: z.string().min(1).optional(),
       leaveTypeId: z.string().min(1),
       startDate: z.string().min(8),
       endDate: z.string().min(8),
@@ -242,8 +271,22 @@ export async function createLeave(req: Request) {
     throw new ApiException(400, 'validation.failed');
   }
   const tenantId = tenantObjectId(req);
+  const canManageOthers = req.authUser?.permissions.includes(PERMISSIONS.HRM_LEAVE_MANAGE) ?? false;
+  const selfId = req.authUser?.employeeId;
+  let targetEmployeeId = parsed.data.employeeId;
+  if (!canManageOthers) {
+    if (!selfId) {
+      throw new ApiException(403, 'hrm.employee_link_required');
+    }
+    targetEmployeeId = selfId;
+  } else if (!targetEmployeeId) {
+    if (!selfId) throw new ApiException(400, 'validation.failed');
+    targetEmployeeId = selfId;
+  }
+  await assertEmployeeInAccess(req, targetEmployeeId);
+
   const employee = await EmployeeModel.findOne({
-    _id: parseObjectId(parsed.data.employeeId, 'employeeId'),
+    _id: parseObjectId(targetEmployeeId, 'employeeId'),
     tenantId,
     status: 'ACTIVE',
   }).exec();
@@ -283,6 +326,7 @@ export async function decideLeave(req: Request, status: 'APPROVED' | 'REJECTED')
   if (row.status !== 'PENDING') {
     throw new ApiException(409, 'hrm.leave_already_decided');
   }
+  await assertEmployeeInAccess(req, String(row.employeeId));
   row.status = status;
   row.decidedBy = new mongoose.Types.ObjectId(req.authUser!.id);
   row.decidedAt = new Date();
@@ -291,13 +335,22 @@ export async function decideLeave(req: Request, status: 'APPROVED' | 'REJECTED')
 }
 
 export async function listAttendance(req: Request) {
-  const tenantId = tenantObjectId(req);
-  const filter: Record<string, unknown> = { tenantId };
+  const { tenantId, filter: empFilter } = await buildEmployeeAccessFilter(req);
+  const visible = await EmployeeModel.find(empFilter).select('_id').lean().exec();
+  const visibleIds = visible.map((row) => row._id);
+  const filter: Record<string, unknown> = {
+    tenantId,
+    employeeId: {
+      $in: visibleIds.length ? visibleIds : [new mongoose.Types.ObjectId('000000000000000000000000')],
+    },
+  };
   if (req.query.employeeId) {
-    filter.employeeId = parseObjectId(String(req.query.employeeId), 'employeeId');
+    const requested = parseObjectId(String(req.query.employeeId), 'employeeId');
+    await assertEmployeeInAccess(req, String(requested));
+    filter.employeeId = requested;
   }
   const rows = await AttendanceModel.find(filter).sort({ clockInAt: -1 }).limit(200).lean().exec();
-  const employees = await EmployeeModel.find({ tenantId }).lean().exec();
+  const employees = await EmployeeModel.find({ tenantId, _id: { $in: visibleIds } }).lean().exec();
   const employeeMap = new Map(employees.map((row) => [String(row._id), row]));
   return rows.map((row) => {
     const employee = employeeMap.get(String(row.employeeId));
@@ -318,13 +371,24 @@ export async function listAttendance(req: Request) {
 }
 
 export async function clockAttendance(req: Request, action: 'in' | 'out') {
-  const parsed = z.object({ employeeId: z.string().min(1) }).safeParse(req.body);
+  const parsed = z.object({ employeeId: z.string().min(1).optional() }).safeParse(req.body);
   if (!parsed.success) {
     throw new ApiException(400, 'validation.failed');
   }
   const tenantId = tenantObjectId(req);
+  const canManage = req.authUser?.permissions.includes(PERMISSIONS.HRM_ATTENDANCE_MANAGE) ?? false;
+  const selfId = req.authUser?.employeeId;
+  let targetId = parsed.data.employeeId;
+  if (!canManage) {
+    if (!selfId) throw new ApiException(403, 'hrm.employee_link_required');
+    targetId = selfId;
+  } else if (!targetId) {
+    if (!selfId) throw new ApiException(400, 'validation.failed');
+    targetId = selfId;
+  }
+  await assertEmployeeInAccess(req, targetId);
   const employee = await EmployeeModel.findOne({
-    _id: parseObjectId(parsed.data.employeeId, 'employeeId'),
+    _id: parseObjectId(targetId, 'employeeId'),
     tenantId,
     status: 'ACTIVE',
   }).exec();
@@ -381,6 +445,8 @@ const employeeBody = z.object({
   managerId: z.string().min(1).nullable().optional(),
   supervisorId: z.string().min(1).nullable().optional(),
   joiningDate: z.string().min(8),
+  photoUrl: z.string().trim().max(500).optional(),
+  workFromHome: z.boolean().optional(),
 });
 
 async function resolveEmployeeRefs(
@@ -404,7 +470,7 @@ async function resolveEmployeeRefs(
   let managerId: mongoose.Types.ObjectId | undefined;
   let supervisorId: mongoose.Types.ObjectId | undefined;
 
-  if (data.orgRole === 'SUPERVISOR') {
+  if (data.orgRole === 'SALES_MANAGER' || data.orgRole === 'SUPERVISOR') {
     if (!data.managerId) {
       throw new ApiException(400, 'hrm.manager_required');
     }
@@ -412,7 +478,7 @@ async function resolveEmployeeRefs(
       _id: parseObjectId(data.managerId, 'managerId'),
       tenantId,
       branchId: branch._id,
-      orgRole: 'MANAGER',
+      orgRole: { $in: ['BRANCH_HEAD', 'MANAGER', 'LOCATION_HEAD', 'HEAD'] },
       status: 'ACTIVE',
     }).exec();
     if (!manager || String(manager._id) === currentId) {
@@ -421,7 +487,7 @@ async function resolveEmployeeRefs(
     managerId = manager._id;
   }
 
-  if (data.orgRole === 'STAFF') {
+  if (['EXECUTIVE', 'STAFF', 'COORDINATOR'].includes(data.orgRole)) {
     if (!data.supervisorId) {
       throw new ApiException(400, 'hrm.supervisor_required');
     }
@@ -429,14 +495,14 @@ async function resolveEmployeeRefs(
       _id: parseObjectId(data.supervisorId, 'supervisorId'),
       tenantId,
       branchId: branch._id,
-      orgRole: 'SUPERVISOR',
+      orgRole: { $in: ['SALES_MANAGER', 'SUPERVISOR', 'BRANCH_HEAD', 'MANAGER', 'COORDINATOR_HEAD'] },
       status: 'ACTIVE',
     }).exec();
-    if (!supervisor || !supervisor.managerId || String(supervisor._id) === currentId) {
+    if (!supervisor || String(supervisor._id) === currentId) {
       throw new ApiException(400, 'hrm.supervisor_invalid');
     }
     supervisorId = supervisor._id;
-    managerId = supervisor.managerId ?? undefined;
+    managerId = supervisor.managerId ?? supervisor._id;
   }
 
   const joiningDate = new Date(data.joiningDate);
@@ -491,6 +557,8 @@ async function resolveEmployeeRefs(
     gender: data.gender ?? '',
     address: data.address ?? '',
     roleId,
+    photoUrl: data.photoUrl?.trim() || '',
+    workFromHome: Boolean(data.workFromHome),
   };
 }
 
@@ -528,6 +596,8 @@ async function serializeEmployees(
       dateOfBirth: employee.dateOfBirth ?? null,
       gender: employee.gender ?? '',
       address: employee.address ?? '',
+      photoUrl: (employee.photoUrl as string) || '/default-avatar.svg',
+      workFromHome: Boolean(employee.workFromHome),
       branch: namedId(branchMap.get(String(employee.branchId))),
       department: namedId(departmentMap.get(String(employee.departmentId))),
       designation: namedId(designationMap.get(String(employee.designationId))),

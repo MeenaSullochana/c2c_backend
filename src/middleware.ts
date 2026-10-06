@@ -1,6 +1,8 @@
 import type { NextFunction, Request, Response } from 'express';
 import { UserModel, TenantModel } from './models';
 import { verifyAccessToken } from './auth-utils';
+import type { AccessScope } from './shared';
+import { ROLE_KEYS } from './shared';
 
 export function asyncHandler(
   handler: (req: Request, res: Response, next: NextFunction) => Promise<unknown>,
@@ -20,6 +22,8 @@ export type AuthUser = {
   locale: string;
   roleKeys: string[];
   permissions: string[];
+  employeeId?: string;
+  accessScope: AccessScope;
 };
 
 declare global {
@@ -50,6 +54,10 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       return res.status(401).json({ message: 'auth.unauthorized' });
     }
 
+    const isAdmin =
+      user.roleKeys.includes(ROLE_KEYS.TENANT_OWNER) || user.roleKeys.includes(ROLE_KEYS.TENANT_ADMIN);
+    const accessScope = (user.accessScope as AccessScope | undefined) || (isAdmin ? 'ALL' : 'SELF');
+
     req.authUser = {
       id: String(user._id),
       tenantId: String(user.tenantId),
@@ -60,6 +68,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       locale: user.locale,
       roleKeys: user.roleKeys,
       permissions: user.permissions,
+      employeeId: user.employeeId ? String(user.employeeId) : undefined,
+      accessScope,
     };
     return next();
   } catch {

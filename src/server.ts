@@ -12,14 +12,18 @@ import { dashboardRouter } from './routes-dashboard';
 import { hrmRouter } from './routes-hrm';
 import { leadRouter } from './routes-leads';
 import { branchRouter, locationRouter } from './routes-locations';
+import { uploadsRouter } from './routes-uploads';
+import { websiteRouter } from './routes-website';
 import { publicTenant, publicUser } from './auth-utils';
 import { PERMISSIONS } from './shared';
+import { UPLOADS_ROOT } from './upload';
 
 function allowedOrigins(): Set<string> {
   return new Set(
     [
       ...env.WEB_ORIGIN.split(','),
       'http://localhost:5173',
+      'http://localhost:5174',
       'https://moneyy-zone.netlify.app',
     ]
       .map((origin) => origin.trim().replace(/\/$/, ''))
@@ -50,6 +54,8 @@ async function bootstrap() {
     }),
   );
   app.use(express.json({ limit: '10mb' }));
+  app.use('/uploads', express.static(UPLOADS_ROOT));
+  app.use('/api/uploads', uploadsRouter);
 
   app.get('/api/health', (_req, res) => {
     const mongoUp = mongoose.connection.readyState === 1;
@@ -74,6 +80,7 @@ async function bootstrap() {
   app.use('/api/branches', branchRouter);
   app.use('/api/hrm', hrmRouter);
   app.use('/api/leads', leadRouter);
+  app.use('/api/website', websiteRouter);
 
   app.get(
     '/api/users',

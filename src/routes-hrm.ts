@@ -19,6 +19,7 @@ import {
   updateEmployee,
 } from './services-hrm';
 import { createRole, listRoles, updateRole } from './services-roles';
+import { listPayrollSummary, listPayslips, listWorkInfo, getPayslip, getWorkInfoDetail } from './services-payroll';
 
 export const hrmRouter = Router();
 hrmRouter.use(requireAuth);
@@ -151,15 +152,50 @@ hrmRouter.get(
 );
 hrmRouter.post(
   '/attendance/clock-in',
-  requirePermission(PERMISSIONS.HRM_ATTENDANCE_MANAGE),
+  requirePermission(PERMISSIONS.HRM_ATTENDANCE_VIEW),
   asyncHandler(async (req, res) => {
     res.status(201).json(await clockAttendance(req, 'in'));
   }),
 );
 hrmRouter.post(
   '/attendance/clock-out',
-  requirePermission(PERMISSIONS.HRM_ATTENDANCE_MANAGE),
+  requirePermission(PERMISSIONS.HRM_ATTENDANCE_VIEW),
   asyncHandler(async (req, res) => {
     res.json(await clockAttendance(req, 'out'));
+  }),
+);
+hrmRouter.get(
+  '/work-info',
+  requirePermission(PERMISSIONS.HRM_EMPLOYEE_VIEW),
+  asyncHandler(async (req, res) => {
+    res.json(await listWorkInfo(req));
+  }),
+);
+hrmRouter.get(
+  '/work-info/:id',
+  requirePermission(PERMISSIONS.HRM_EMPLOYEE_VIEW),
+  asyncHandler(async (req, res) => {
+    res.json(await getWorkInfoDetail(req));
+  }),
+);
+hrmRouter.get(
+  '/payroll',
+  requirePermission(PERMISSIONS.HRM_EMPLOYEE_VIEW),
+  asyncHandler(async (req, res) => {
+    res.json(await listPayrollSummary(req));
+  }),
+);
+hrmRouter.get(
+  '/payslips',
+  requirePermission(PERMISSIONS.HRM_EMPLOYEE_VIEW),
+  asyncHandler(async (req, res) => {
+    res.json(await listPayslips(req));
+  }),
+);
+hrmRouter.get(
+  '/payslips/:id',
+  requirePermission(PERMISSIONS.HRM_EMPLOYEE_VIEW),
+  asyncHandler(async (req, res) => {
+    res.json(await getPayslip(req));
   }),
 );

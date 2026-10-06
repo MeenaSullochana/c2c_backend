@@ -1,10 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import mongoose from 'mongoose';
-import {
-  ROLE_KEYS,
-  TENANT_OWNER_PERMISSIONS,
-} from './shared';
+import { ORG_ROLE_SCOPE, ROLE_KEYS, TENANT_OWNER_PERMISSIONS, type OrgRole } from './shared';
 import { AuditLogModel, RefreshTokenModel, TenantModel, UserModel } from './models';
 import {
   comparePassword,
@@ -16,6 +13,8 @@ import {
 } from './auth-utils';
 import { env } from './config';
 import { requireAuth } from './middleware';
+import { BranchModel, CityModel, CountryModel, EmployeeModel, StateModel } from './models-business';
+import { namedId } from './scope';
 
 export const authRouter = Router();
 
@@ -192,15 +191,145 @@ authRouter.get('/me', requireAuth, async (req, res) => {
   if (!user || !tenant) {
     return res.status(401).json({ message: 'auth.unauthorized' });
   }
-  return res.json(publicUser(user, tenant));
+  return res.json(await toPublicUser(user, tenant));
 });
 
+async function toPublicUser(
+  user: {
+    _id: unknown;
+    tenantId: unknown;
+    email: string;
+    firstName: string;
+    lastName: string;
+    status: string;
+    locale: string;
+    roleKeys: string[];
+    permissions: string[];
+    employeeId?: unknown;
+    accessScope?: string;
+  },
+  tenant: {
+    _id: unknown;
+    name: string;
+    slug: string;
+    status: string;
+    locale: string;
+    brandName?: string;
+    tagline?: string;
+    logoUrl?: string;
+    supportEmail?: string;
+    supportPhone?: string;
+    address?: string;
+    website?: string;
+  },
+) {
+  const isAdmin =
+    user.roleKeys.includes(ROLE_KEYS.TENANT_OWNER) || user.roleKeys.includes(ROLE_KEYS.TENANT_ADMIN);
+  let accessScope = user.accessScope || (isAdmin ? 'ALL' : 'SELF');
+  let orgRole: string | null = null;
+  let branch = null as ReturnType<typeof namedId>;
+  let city = null as { id: string; name: string } | null;
+  let state = null as ReturnType<typeof namedId>;
+  let country = null as ReturnType<typeof namedId>;
+
+  if (user.employeeId) {
+    const employee = await EmployeeModel.findById(user.employeeId).lean().exec();
+    if (employee) {
+      orgRole = employee.orgRole;
+      if (!user.accessScope || user.accessScope === 'SELF' || user.accessScope === 'ALL') {
+        if (isAdmin || employee.orgRole === 'HEAD') accessScope = 'ALL';
+        else accessScope = ORG_ROLE_SCOPE[employee.orgRole as OrgRole] ?? 'SELF';
+      } else {
+        accessScope = user.accessScope;
+      }
+
+      const branchDoc = await BranchModel.findById(employee.branchId).lean().exec();
+      const cityFromBranch = branchDoc ? await CityModel.findById(branchDoc.cityId).lean().exec() : null;
+
+      let stateDoc: { _id: unknown; name?: string; code?: string; countryId: unknown } | null = null;
+      let cityDoc: { _id: unknown; name: string; stateId: unknown } | null = null;
+
+      if (accessScope === 'STATE') {
+        stateDoc = employee.scopeStateId
+          ? await StateModel.findById(employee.scopeStateId).lean().exec()
+          : cityFromBranch
+            ? await StateModel.findById(cityFromBranch.stateId).lean().exec()
+            : null;
+        // Regional head: state-wide — do not pin city/branch for filters
+        cityDoc = null;
+        branch = null;
+      } else if (accessScope === 'CITY') {
+        cityDoc = employee.scopeCityId
+          ? await CityModel.findById(employee.scopeCityId).lean().exec()
+          : cityFromBranch;
+        stateDoc = cityDoc ? await StateModel.findById(cityDoc.stateId).lean().exec() : null;
+        // Location head: city-wide — branch stays selectable among city branches
+        branch = null;
+      } else {
+        branch = namedId(branchDoc);
+        cityDoc = employee.scopeCityId
+          ? await CityModel.findById(employee.scopeCityId).lean().exec()
+          : cityFromBranch;
+        stateDoc = cityDoc
+          ? await StateModel.findById(employee.scopeStateId ?? cityDoc.stateId).lean().exec()
+          : employee.scopeStateId
+            ? await StateModel.findById(employee.scopeStateId).lean().exec()
+            : null;
+      }
+
+      if (cityDoc) {
+        city = { id: String(cityDoc._id), name: cityDoc.name };
+      }
+      state = namedId(stateDoc);
+      if (stateDoc) {
+        const countryDoc = await CountryModel.findById(stateDoc.countryId).lean().exec();
+        country = namedId(countryDoc);
+      }
+    }
+  }
+
+  return publicUser(user, tenant, {
+    employeeId: user.employeeId ? String(user.employeeId) : null,
+    accessScope,
+    orgRole,
+    branch,
+    city,
+    state,
+    country,
+  });
+}
+
 async function issueAuth(
-  user: { _id: unknown; tenantId: unknown; email: string; firstName: string; lastName: string; status: string; locale: string; roleKeys: string[]; permissions: string[] },
-  tenant: { _id: unknown; name: string; slug: string; status: string; locale: string },
+  user: {
+    _id: unknown;
+    tenantId: unknown;
+    email: string;
+    firstName: string;
+    lastName: string;
+    status: string;
+    locale: string;
+    roleKeys: string[];
+    permissions: string[];
+    employeeId?: unknown;
+    accessScope?: string;
+  },
+  tenant: {
+    _id: unknown;
+    name: string;
+    slug: string;
+    status: string;
+    locale: string;
+    brandName?: string;
+    tagline?: string;
+    logoUrl?: string;
+    supportEmail?: string;
+    supportPhone?: string;
+    address?: string;
+    website?: string;
+  },
 ) {
   return {
-    user: publicUser(user, tenant),
+    user: await toPublicUser(user, tenant),
     tokens: {
       accessToken: signAccessToken({
         sub: String(user._id),

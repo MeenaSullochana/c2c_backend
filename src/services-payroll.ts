@@ -60,7 +60,7 @@ export async function listWorkInfo(req: Request) {
 }
 
 export async function getWorkInfoDetail(req: Request) {
-  const { tenantId, filter } = await scopedEmployeeFilter(req);
+  const { tenantId, filter } = await buildEmployeeAccessFilter(req);
   const employeeId = parseObjectId(req.params.id, 'employeeId');
   const emp = await EmployeeModel.findOne({ ...filter, _id: employeeId }).lean().exec();
   if (!emp) {
